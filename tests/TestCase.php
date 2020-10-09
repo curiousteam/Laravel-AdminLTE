@@ -12,11 +12,12 @@ use JeroenNoten\LaravelAdminLte\Menu\ActiveChecker;
 use JeroenNoten\LaravelAdminLte\Menu\Builder;
 use JeroenNoten\LaravelAdminLte\Menu\Filters\ActiveFilter;
 use JeroenNoten\LaravelAdminLte\Menu\Filters\ClassesFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\DataFilter;
 use JeroenNoten\LaravelAdminLte\Menu\Filters\GateFilter;
 use JeroenNoten\LaravelAdminLte\Menu\Filters\HrefFilter;
 use JeroenNoten\LaravelAdminLte\Menu\Filters\LangFilter;
-use JeroenNoten\LaravelAdminLte\Menu\Filters\SubmenuFilter;
-use PHPUnit\Framework\TestCase as BaseTestCase;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\SearchFilter;
+use Orchestra\Testbench\TestCase as BaseTestCase;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 class TestCase extends BaseTestCase
@@ -25,15 +26,18 @@ class TestCase extends BaseTestCase
 
     private $routeCollection;
 
+    private $translator;
+
     protected function makeMenuBuilder($uri = 'http://example.com', GateContract $gate = null, $locale = 'en')
     {
         return new Builder([
+            new GateFilter($gate ?: $this->makeGate()),
             new HrefFilter($this->makeUrlGenerator($uri)),
             new ActiveFilter($this->makeActiveChecker($uri)),
-            new SubmenuFilter($this->makeActiveChecker($uri)),
             new ClassesFilter(),
-            new GateFilter($gate ?: $this->makeGate()),
+            new DataFilter(),
             new LangFilter($this->makeTranslator($locale)),
+            new SearchFilter(),
         ]);
     }
 
@@ -41,15 +45,15 @@ class TestCase extends BaseTestCase
     {
         $translationLoader = new Illuminate\Translation\FileLoader(new Illuminate\Filesystem\Filesystem, 'resources/lang/');
 
-        $translator = new Illuminate\Translation\Translator($translationLoader, $locale);
-        $translator->addNamespace('adminlte', 'resources/lang/');
+        $this->translator = new Illuminate\Translation\Translator($translationLoader, $locale);
+        $this->translator->addNamespace('adminlte', 'resources/lang/');
 
-        return $translator;
+        return $this->translator;
     }
 
-    protected function makeActiveChecker($uri = 'http://example.com')
+    protected function makeActiveChecker($uri = 'http://example.com', $scheme = null)
     {
-        return new ActiveChecker($this->makeRequest($uri), $this->makeUrlGenerator($uri));
+        return new ActiveChecker($this->makeUrlGenerator($uri, $scheme));
     }
 
     private function makeRequest($uri)
@@ -62,9 +66,18 @@ class TestCase extends BaseTestCase
         return new AdminLte($this->getFilters(), $this->getDispatcher(), $this->makeContainer());
     }
 
-    protected function makeUrlGenerator($uri = 'http://example.com')
+    protected function makeUrlGenerator($uri = 'http://example.com', $scheme = null)
     {
-        return new UrlGenerator($this->getRouteCollection(), $this->makeRequest($uri));
+        $UrlGenerator = new UrlGenerator(
+            $this->getRouteCollection(),
+            $this->makeRequest($uri)
+        );
+
+        if ($scheme) {
+            $UrlGenerator->forceScheme($scheme);
+        }
+
+        return $UrlGenerator;
     }
 
     protected function makeGate()
@@ -102,5 +115,10 @@ class TestCase extends BaseTestCase
         }
 
         return $this->routeCollection;
+    }
+
+    protected function getTranslator()
+    {
+        return $this->translator;
     }
 }
